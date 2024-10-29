@@ -1,0 +1,10 @@
+name: fmtl_sheaves  # You can name the environment as you like
+channels:
+  - defaults
+  - conda-forge
+  - pytorch
+dependencies:
+  - python=3.9
+  - numpy
+  - networkx
+  - pytorch
