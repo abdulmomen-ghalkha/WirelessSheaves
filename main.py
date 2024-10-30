@@ -2,9 +2,11 @@ import argparse
 import torch
 from dfedu import run_dfedu
 from sheaffmtl import run_sheaf_fmtl
+from sheaffmtl_subgraph import run_sheaf_fmtl_subgraph
 from utils import read_vehicle_data, read_school_data, read_har_data, read_gleam_data, MultinomialLogisticRegression, LinearRegression, generate_random_adjacency_matrix, cross_entropy_loss_with_l2, mse_loss_with_l2
 import torch.nn as nn
 import numpy as np
+import networkx as nx
 
 def main():
     parser = argparse.ArgumentParser(description='Federated Learning Algorithms')
@@ -68,6 +70,21 @@ def main():
     )
     elif args.algorithm == 'Sheaf-FMTL':
         average_test_metrics, transmitted_bits_per_iteration = run_sheaf_fmtl(
+            client_train_datasets, 
+            client_test_datasets, 
+            args.num_rounds, 
+            args.alpha, 
+            args.eta, 
+            args.lambda_reg, 
+            args.factor, 
+            adjacency_matrix,
+            model, 
+            loss_func,
+            metric_func,
+            metric_name
+        )
+    elif args.algorithm == 'Sheaf-FMTL-subgraph':
+        average_test_metrics, transmitted_bits_per_iteration = run_sheaf_fmtl_subgraph(
             client_train_datasets, 
             client_test_datasets, 
             args.num_rounds, 

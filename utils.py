@@ -8,6 +8,8 @@ import sklearn
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from torch.utils.data import TensorDataset, DataLoader
+import cvxpy as cp
+from cvxpy.atoms.lambda_sum_smallest import lambda_sum_smallest
 
 class MultinomialLogisticRegression(nn.Module):
     def __init__(self, input_size, num_classes):
