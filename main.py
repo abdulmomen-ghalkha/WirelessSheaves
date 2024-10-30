@@ -7,6 +7,7 @@ from utils import read_vehicle_data, read_school_data, read_har_data, read_gleam
 import torch.nn as nn
 import numpy as np
 import networkx as nx
+import h5py
 
 def main():
     parser = argparse.ArgumentParser(description='Federated Learning Algorithms')
@@ -19,6 +20,9 @@ def main():
     parser.add_argument('--lambda-reg', type=float, default=0.001, help='Regularization strength')
     parser.add_argument('--factor', type=float, default=0.3, help='Factor for P_ij matrix size for Sheaf-FMTL')
     parser.add_argument('--num-rounds', type=int, default=200, help='Number of training rounds')
+    parser.add_argument('--beta', type=float, default=0.01, help='Connectivity and Lgap tradeoff')
+    parser.add_argument('--Ct', type=float, default=1.0, help='Communication resources saveup')
+    parser.add_argument('--times', type=int, default=5, help='Number of MC runs')
     args = parser.parse_args()
 
     if args.dataset == 'vehicle':
@@ -53,56 +57,81 @@ def main():
 
     adjacency_matrix = generate_random_adjacency_matrix(num_clients)
     neighbors = [np.nonzero(adjacency_matrix[i])[0].tolist() for i in range(num_clients)]
+    
+    for time in range(args.times):
 
-    if args.algorithm == 'dFedU':
-        average_test_metrics, transmitted_bits_per_iteration = run_dfedu(
-            client_train_datasets,
-            client_test_datasets,
-            args.num_rounds,
-            args.local_iterations,
-            args.local_lr,
-            neighbors,
-            args.lambda_reg,
-            model,
-            loss_func,
-            metric_func,
-            metric_name
-    )
-    elif args.algorithm == 'Sheaf-FMTL':
-        average_test_metrics, transmitted_bits_per_iteration = run_sheaf_fmtl(
-            client_train_datasets, 
-            client_test_datasets, 
-            args.num_rounds, 
-            args.alpha, 
-            args.eta, 
-            args.lambda_reg, 
-            args.factor, 
-            adjacency_matrix,
-            model, 
-            loss_func,
-            metric_func,
-            metric_name
+        if args.algorithm == 'dFedU':
+            average_test_metrics, transmitted_bits_per_iteration = run_dfedu(
+                client_train_datasets,
+                client_test_datasets,
+                args.num_rounds,
+                args.local_iterations,
+                args.local_lr,
+                neighbors,
+                args.lambda_reg,
+                model,
+                loss_func,
+                metric_func,
+                metric_name
         )
-    elif args.algorithm == 'Sheaf-FMTL-subgraph':
-        average_test_metrics, transmitted_bits_per_iteration = run_sheaf_fmtl_subgraph(
-            client_train_datasets, 
-            client_test_datasets, 
-            args.num_rounds, 
-            args.alpha, 
-            args.eta, 
-            args.lambda_reg, 
-            args.factor, 
-            adjacency_matrix,
-            model, 
-            loss_func,
-            metric_func,
-            metric_name
-        )
-    else:
-        raise ValueError('Invalid algorithm. Choose either "dFedU" or "Sheaf-FL".')
+        elif args.algorithm == 'Sheaf-FMTL':
+            average_test_metrics, transmitted_bits_per_iteration = run_sheaf_fmtl(
+                client_train_datasets, 
+                client_test_datasets, 
+                args.num_rounds, 
+                args.alpha, 
+                args.eta, 
+                args.lambda_reg, 
+                args.factor, 
+                adjacency_matrix,
+                model, 
+                loss_func,
+                metric_func,
+                metric_name
+            )
+        elif args.algorithm == 'Sheaf-FMTL-subgraph':
+            average_test_metrics, transmitted_bits_per_iteration = run_sheaf_fmtl_subgraph(
+                client_train_datasets, 
+                client_test_datasets, 
+                args.num_rounds, 
+                args.alpha, 
+                args.eta, 
+                args.lambda_reg, 
+                args.factor, 
+                adjacency_matrix,
+                model, 
+                loss_func,
+                metric_func,
+                metric_name,
+                args.beta, 
+                args.Ct
+            )
+        else:
+            raise ValueError('Invalid algorithm. Choose either "dFedU" or "Sheaf-FL".')
 
-    print(f'Average Test {metric_name}s:', average_test_metrics)
-    print('Transmitted Bits per Iteration:', transmitted_bits_per_iteration)
+        print(f'Average Test {metric_name}s:', average_test_metrics)
+        print('Transmitted Bits per Iteration:', transmitted_bits_per_iteration)
+        # Convert to numpy arrays
+        average_test_metrics_array = np.array(average_test_metrics)
+        transmitted_bits_per_iteration_array = np.array(transmitted_bits_per_iteration)
+        
+
+        # Construct the filename with parameters
+        #alg = f"{args.dataset}_{args.algorithm}_{args.local_lr}_{args.alpha}_{args.eta}_{args.local_iterations}_{num_clients}u_{lambda-reg}b_{local_epochs}_{times}"
+        alg = (
+            f"{args.dataset}_{args.algorithm}_{args.local_lr}_{args.alpha}_"
+            f"{args.eta}_{args.local_iterations}_{args.lambda_reg}_factor_{args.factor}_"
+            f"{args.num_rounds}_beta_{args.beta}_Ct_{args.Ct}_time_{time}"
+        )
+
+        # Convert lists to numpy arrays
+        average_test_metrics_array = np.array(average_test_metrics)
+        transmitted_bits_per_iteration_array = np.array(transmitted_bits_per_iteration)
+
+        # Save to an HDF5 file
+        with h5py.File(f"./results/{alg}.h5", 'w') as hf:
+            hf.create_dataset('average_test_metrics', data=average_test_metrics_array)
+            hf.create_dataset('transmitted_bits_per_iteration', data=transmitted_bits_per_iteration_array)       
 
 if __name__ == '__main__':
     main()

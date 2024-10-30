@@ -8,8 +8,9 @@ import networkx as nx
 import cvxpy as cp
 from cvxpy.atoms.lambda_sum_smallest import lambda_sum_smallest
 
-def run_sheaf_fmtl_subgraph(client_train_datasets, client_test_datasets, num_rounds, alpha, eta, lambda_reg, factor, adjacency_matrix, model, loss_func, metric_func, metric_name):
+def run_sheaf_fmtl_subgraph(client_train_datasets, client_test_datasets, num_rounds, alpha, eta, lambda_reg, factor, adjacency_matrix, model, loss_func, metric_func, metric_name, beta, Ct):
     # Initialize model parameters (theta_i) for each client
+
     num_clients = len(client_train_datasets)
     client_models = [copy.deepcopy(model) for _ in client_train_datasets]
     neighbors = [np.nonzero(adjacency_matrix[i])[0].tolist() for i in range(num_clients)]
@@ -68,15 +69,10 @@ def run_sheaf_fmtl_subgraph(client_train_datasets, client_test_datasets, num_rou
         A = np.diag(np.diag(L)) - L 
         G_v = nx.from_numpy_array(A)
         sub_graphs.append(G_v)
-
-
-    
-    
-    K = 20
-
-
         
 
+
+    K = 20
     
     # Training loop
     for round in range(num_rounds):
@@ -102,13 +98,14 @@ def run_sheaf_fmtl_subgraph(client_train_datasets, client_test_datasets, num_rou
             x = cp.Variable(n)
             algebraic_connectivity = lambda_sum_smallest(sum(x[i] * laplacians[i] for i in range(n)), 2)
             L_gap_distance = sum(x[i] * L_gaps[i] for i in range(n))
-            alpha = 0.01
+
+
             # Define objective
-            objective = cp.Maximize(algebraic_connectivity + alpha * L_gap_distance)
+            objective = cp.Maximize(algebraic_connectivity + beta * L_gap_distance)
             # Define constraints
             constraints = [
             x >= 0,          # Elementwise inequality 0 <= x
-            cp.sum(x) <= 0.8 * n, # Elementwise inequality x <= 1
+            cp.sum(x) <= Ct * n, # Elementwise inequality x <= 1
             x <= 1
             ]
 
@@ -129,6 +126,7 @@ def run_sheaf_fmtl_subgraph(client_train_datasets, client_test_datasets, num_rou
 
         print(round)
         G_merged = nx.Graph()
+        G_merged.add_nodes_from(range(num_clients))
         for p, sub_g in zip(sampled_elements, sub_graphs):
             if p:
                 G_merged = nx.compose(G_merged, sub_g)
@@ -200,5 +198,8 @@ def run_sheaf_fmtl_subgraph(client_train_datasets, client_test_datasets, num_rou
         max_neighbors = max(len(n) for n in neighbors)
         cumulative_transmitted_bits += 2 * max_neighbors * 32 * int(factor*num_params)
         transmitted_bits_per_iteration[round] = cumulative_transmitted_bits
+        
+    
 
+ 
     return average_test_metrics, transmitted_bits_per_iteration

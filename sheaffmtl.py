@@ -82,5 +82,7 @@ def run_sheaf_fmtl(client_train_datasets, client_test_datasets, num_rounds, alph
         num_params = count_model_parameters(client_models[0])
         cumulative_transmitted_bits += 2 * max_neighbors * 32 * int(factor*num_params)
         transmitted_bits_per_iteration[round] = cumulative_transmitted_bits
+        
+        
 
     return average_test_metrics, transmitted_bits_per_iteration
