@@ -222,7 +222,7 @@ def read_har_data(downsample_rate=0.2, downsample_clients=None):
 
     return client_train_datasets, client_test_datasets, input_size, num_classes
 
-client_train_datasets, client_test_datasets, input_size, num_classes = read_har_data()
+#client_train_datasets, client_test_datasets, input_size, num_classes = read_har_data()
 
 def read_gleam_data(seed=None, bias=False, density=1.0, standardize=False, downsample_rate=0.2):
   """Read gleam dataset from .mat file.    """
