@@ -220,7 +220,7 @@ def read_har_data(downsample_rate=0.2, downsample_clients=None):
 
     return client_train_datasets, client_test_datasets, input_size, num_classes
 
-#client_train_datasets, client_test_datasets, input_size, num_classes = read_har_data()
+client_train_datasets, client_test_datasets, input_size, num_classes = read_har_data()
 
 def read_gleam_data(seed=None, bias=False, density=1.0, standardize=False, downsample_rate=0.2):
   """Read gleam dataset from .mat file.    """
@@ -284,70 +284,3 @@ def read_gleam_data(seed=None, bias=False, density=1.0, standardize=False, downs
     client_test_datasets.append(test_dataset)
 
   return client_train_datasets, client_test_datasets, input_size, num_classes
-
-
-#---------------------------New Functions-------------------------------
-
-def TwoSectionH(G): # Generate the 2-section of the proposed hypergraph, i.e., H2
-    # VertexH = G.nodes()
-    Hyperedge = [ tuple(sorted([node] + [n for n in G.neighbors(node)]))
-                                    for node in G.nodes() ] # construct a hypergraph each of whose hyperedge consists of a node and its neighbours
-    Hyperedge = list(set(Hyperedge)) # remove any repeated hyperedges
-    H2Edges = [[tuple(sorted(e)) for e in nx.complete_graph(he).edges()] for he in Hyperedge] # a list of list of edges of H2, pylint: disable = undefined-variable
-    temp = [] # construct the edge set of the H2
-    for e in H2Edges:
-        temp.extend(e) # remove the inner list delimiter "[]"
-    H2Edges = list(set(temp)) # remove any repeated edges
-
-    H2 = nx.Graph() # pylint: disable = undefined-variable
-    H2.add_nodes_from(G.nodes())
-    H2.add_edges_from(H2Edges)
-    vertex_color_map = nx.greedy_color(H2, strategy = 'saturation_largest_first') # vertex coloring H2, pylint: disable = undefined-variable
-    # Chi = max(vertex_color_map.values()) + 1 # chromatic number of the present coloring scheme
-
-    return H2, vertex_color_map
-
-
-def seq_scheduling(G):
-    # A sequential list (slot's) of star toplogy-based schedule in a form of dicts
-    star_schedule_list = []
-    # key-value pair herein is node (n_b, n_c), where n_b is the #times for which a node transmits as a star center (BC),
-    # and n_c is the #times for which a node transmits as an outer node
-    Tx_times = {node: [0, 0] for node in G.nodes()}
-
-    while G:
-        _, from_node_to_color_id = TwoSectionH(G)
-        color_degree = {c: sum(len(G[node]) for node, color in from_node_to_color_id.items() if color == c)
-                        for c in from_node_to_color_id.values()}
-        chosen_color = list(color_degree.values()).index(max(color_degree.values()))  # find arg_max(degree(color_list))
-
-        # A dict including (star center: associated nodes) pairs that transmits or recieves in parallel at the current slot
-        star_schedule_dict = {node: G[node] for node, color in from_node_to_color_id.items() if color == chosen_color}
-        # Append the scheule in the current slot to the sequential schedule list
-        star_schedule_list.append(star_schedule_dict)
-        # Update n_b for the star center
-        for node in star_schedule_dict.keys():
-            Tx_times[node][0] += 1
-        # Update n_c for the neighbors of the star centers
-        for neighbors in star_schedule_dict.values():
-            for node in neighbors:
-                Tx_times[node][1] += 1
-
-        # Update the graph
-        # Remove the scheduled Rxs, i.e., the star centers
-        G.remove_nodes_from(star_schedule_dict.keys())
-        # Remove any standalone nodes
-        current_node_list = list(G.nodes())
-        for node in current_node_list:
-            if not (G[node]):
-                G.remove_node(node)
-
-    return star_schedule_list, Tx_times
-
-def dig_comp_level(G, CG, N, Chi, barP, N0 = 10 ** (-169/10) * 1e-3, b = 64, d = 7850):
-    K = CG.shape[0]
-    m_array = [int( N / Chi * np.log2(1 + barP * Chi / N0 * min(CG[i,[j for j in G[i]]]))) for i in range(K)]
-    m_array = np.maximum(np.minimum(np.array(m_array)/b, d), 1)
-
-    return m_array
-

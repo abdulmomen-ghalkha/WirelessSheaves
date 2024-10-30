@@ -3,44 +3,24 @@ import torch
 import numpy as np
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from utils import count_model_parameters, evaluate_metric, cross_entropy_loss_with_l2, mse_loss_with_l2, \
-    MultinomialLogisticRegression, LinearRegression, dig_comp_level
+from utils import count_model_parameters, evaluate_metric, cross_entropy_loss_with_l2, mse_loss_with_l2, MultinomialLogisticRegression, LinearRegression
 
+def run_dfedu(client_train_datasets, client_test_datasets, num_rounds, local_iterations, local_lr, neighbors, lambda_reg, model, loss_func, metric_func, metric_name):
 
-def run_dfedu(client_train_datasets, client_test_datasets, num_rounds, local_iterations, local_lr, neighbors,
-              lambda_reg, model, loss_func, metric_func, metric_name, G, K, CH_gen, PL, Chi, P_bar, N,
-                       d):
-    global_lr = local_lr * local_iterations
+    global_lr = local_lr*local_iterations
     client_models = [copy.deepcopy(model) for _ in client_train_datasets]
     average_test_metrics = []
     transmitted_bits_per_iteration = np.zeros(num_rounds)
-    cumulative_used_resource_blocks = 0
-    resource_blocks = np.zeros(num_rounds)
-
+    
     # Calculate the number of bits for a single parameter transmission (assuming 32 bits per parameter)
     bits_per_param = 32
 
     # Count the parameters in one of the client models (assuming all client models have the same number of parameters)
-    num_params = count_model_parameters(client_models[0])
+    num_params = count_model_parameters(client_models[0]) 
     cumulative_transmitted_bits = 0
     max_neighbors = max(len(n) for n in neighbors)
 
     for round in range(num_rounds):
-        CH_gen_current = CH_gen[round]
-        CH = np.ones((K, K), dtype=complex)  # Channel coefficients
-        for i in range(K):
-            for j in G[i]:
-                if j < i:
-                    CH[i, j] = CH_gen_current[i, j]
-        for i in range(K):
-            for j in G[i]:
-                if j > i:
-                    CH[i, j] = np.conjugate(CH[j, i])
-        CH = np.sqrt(PL) * CH
-
-        CG = np.abs(CH) ** 2
-        # A list (device_i's) of #rows for the RLC matrix supported by the channels of each device to its neighbors
-        m_array = dig_comp_level(G, CG, N, Chi, P_bar, 10 ** (-169 / 10) * 1e-3, 32, d)
         # Local updates
         for client_id, client_data in enumerate(client_train_datasets):
             optimizer = torch.optim.SGD(client_models[client_id].parameters(), lr=local_lr)
@@ -57,10 +37,8 @@ def run_dfedu(client_train_datasets, client_test_datasets, num_rounds, local_ite
 
             for neighbor_id in neighbors[client_id]:
                 weight = 1  # Define the weight between clients
-                for (param, neighbor_param), update in zip(
-                        zip(client_model.parameters(), client_models[neighbor_id].parameters()),
-                        client_updates.values()):
-                    update += global_lr * lambda_reg * weight * (param.data - neighbor_param.data)
+                for (param, neighbor_param), update in zip(zip(client_model.parameters(), client_models[neighbor_id].parameters()), client_updates.values()):
+                    update += global_lr * lambda_reg* weight * (param.data - neighbor_param.data)
 
             for param, update in zip(client_model.parameters(), client_updates.values()):
                 param.data -= update
@@ -70,12 +48,9 @@ def run_dfedu(client_train_datasets, client_test_datasets, num_rounds, local_ite
                         for client_model, client_test_dataset in zip(client_models, client_test_datasets)]
         average_test_metric = sum(test_metrics) / len(test_metrics)
         average_test_metrics.append(average_test_metric)
-
+        
         # Calculate communication cost
         cumulative_transmitted_bits += 2 * max_neighbors * bits_per_param * num_params
         transmitted_bits_per_iteration[round] = cumulative_transmitted_bits
-        cumulative_used_resource_blocks += int(np.ceil(d / np.min(m_array)))
-        print(cumulative_used_resource_blocks)
-        resource_blocks[round] = cumulative_used_resource_blocks
 
-    return average_test_metrics, transmitted_bits_per_iteration, resource_blocks
+    return average_test_metrics, transmitted_bits_per_iteration
