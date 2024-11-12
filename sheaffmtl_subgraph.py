@@ -194,8 +194,8 @@ def run_sheaf_fmtl_subgraph(client_train_datasets, client_test_datasets, num_rou
 
         # Calculate communication cost
         num_params = count_model_parameters(client_models[0])
-        edges = [np.nonzero(merged_adjacency_matrix[i])[0].tolist() for i in range(num_clients)]
-        num_edges = 0.5 * sum(len(n) for n in neighbors)
+        sampled_neighbors = [np.nonzero(merged_adjacency_matrix[i])[0].tolist() for i in range(num_clients)]
+        num_edges = 0.5 * sum(len(n) for n in sampled_neighbors)
         cumulative_transmitted_bits += 2 * num_edges * 32 * int(factor*num_params)
         transmitted_bits_per_iteration[round] = cumulative_transmitted_bits
         
