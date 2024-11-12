@@ -50,7 +50,8 @@ def run_dfedu(client_train_datasets, client_test_datasets, num_rounds, local_ite
         average_test_metrics.append(average_test_metric)
         
         # Calculate communication cost
-        cumulative_transmitted_bits += 2 * max_neighbors * bits_per_param * num_params
+        num_edges = 0.5 * sum(len(n) for n in neighbors)
+        cumulative_transmitted_bits += 2 * num_edges * bits_per_param * num_params
         transmitted_bits_per_iteration[round] = cumulative_transmitted_bits
 
     return average_test_metrics, transmitted_bits_per_iteration
