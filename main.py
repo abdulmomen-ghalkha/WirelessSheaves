@@ -23,6 +23,7 @@ def main():
     parser.add_argument('--beta', type=float, default=0.01, help='Connectivity and Lgap tradeoff')
     parser.add_argument('--Ct', type=float, default=1.0, help='Communication resources saveup')
     parser.add_argument('--times', type=int, default=5, help='Number of MC runs')
+    parser.add_argument('--K', type=int, default=20, help='Sampling probabilities Optimization step')
     args = parser.parse_args()
 
     if args.dataset == 'vehicle':
@@ -104,7 +105,8 @@ def main():
                 metric_func,
                 metric_name,
                 args.beta, 
-                args.Ct
+                args.Ct,
+                args.K
             )
         else:
             raise ValueError('Invalid algorithm. Choose either "dFedU" or "Sheaf-FL".')
@@ -121,7 +123,7 @@ def main():
         alg = (
             f"{args.dataset}_{args.algorithm}_{args.local_lr}_{args.alpha}_"
             f"{args.eta}_{args.local_iterations}_{args.lambda_reg}_factor_{args.factor}_"
-            f"{args.num_rounds}_beta_{args.beta}_Ct_{args.Ct}_time_{time}"
+            f"{args.num_rounds}_beta_{args.beta}_Ct_{args.Ct}_time_{time}_K_{args.K}"
         )
 
         # Convert lists to numpy arrays

@@ -8,7 +8,7 @@ import networkx as nx
 import cvxpy as cp
 from cvxpy.atoms.lambda_sum_smallest import lambda_sum_smallest
 
-def run_sheaf_fmtl_subgraph(client_train_datasets, client_test_datasets, num_rounds, alpha, eta, lambda_reg, factor, adjacency_matrix, model, loss_func, metric_func, metric_name, beta, Ct):
+def run_sheaf_fmtl_subgraph(client_train_datasets, client_test_datasets, num_rounds, alpha, eta, lambda_reg, factor, adjacency_matrix, model, loss_func, metric_func, metric_name, beta, Ct, K):
     # Initialize model parameters (theta_i) for each client
 
     num_clients = len(client_train_datasets)
@@ -72,7 +72,7 @@ def run_sheaf_fmtl_subgraph(client_train_datasets, client_test_datasets, num_rou
         
 
 
-    K = 20
+    K = K
     
     # Training loop
     for round in range(num_rounds):
