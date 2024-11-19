@@ -117,6 +117,20 @@ def run_sheaf_fmtl_subgraph(client_train_datasets, client_test_datasets, num_rou
             # Original list of elements
             elements = np.ones(len(probabilities), np.int32)
 
+        L_gaps_test = np.zeros((num_clients, num_clients))
+
+        
+        
+        for node in range(num_clients):
+            client_model = client_models[node]
+            with torch.no_grad():
+                theta_i = torch.cat([param.view(-1) for param in client_model.parameters()])
+                for neighbor in range(num_clients):
+                    if adjacency_matrix[node, neighbor] == 1: 
+                        P_ij = P[(node, neighbor)]
+                        P_ji = P[(neighbor, node)]
+                        theta_j = torch.cat([param.view(-1) for param in client_models[neighbor].parameters()])
+                        L_gaps_test[node, neighbor] = np.linalg.norm(P_ij @ theta_i - P_ji @ theta_j)
 
         # Define the number of trials for each element (for example, 1 trial per element)
         n_trials = 1
@@ -195,9 +209,11 @@ def run_sheaf_fmtl_subgraph(client_train_datasets, client_test_datasets, num_rou
         # Calculate communication cost
         num_params = count_model_parameters(client_models[0])
         sampled_neighbors = [np.nonzero(merged_adjacency_matrix[i])[0].tolist() for i in range(num_clients)]
+        #print(sampled_neighbors[0:10])
         num_edges = 0.5 * sum(len(n) for n in sampled_neighbors)
-        cumulative_transmitted_bits += 2 * num_edges * 32 * int(factor*num_params)
+        cumulative_transmitted_bits += 2 * num_edges * 32 * int(factor*num_params)  
         transmitted_bits_per_iteration[round] = cumulative_transmitted_bits
+        print(f"round: {round}, Bytes: {cumulative_transmitted_bits / 8 / 1024}KB, Average_metric: {average_test_metric}, L_gap: {np.linalg.norm(L_gaps_test)}")
         
     
 
