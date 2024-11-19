@@ -8,7 +8,7 @@ import networkx as nx
 import cvxpy as cp
 from cvxpy.atoms.lambda_sum_smallest import lambda_sum_smallest
 
-def run_sheaf_fmtl_subgraph(client_train_datasets, client_test_datasets, num_rounds, alpha, eta, lambda_reg, factor, adjacency_matrix, model, loss_func, metric_func, metric_name, beta, Ct, K):
+def run_sheaf_fmtl_subgraph_optimized(client_train_datasets, client_test_datasets, num_rounds, alpha, eta, lambda_reg, factor, adjacency_matrix, model, loss_func, metric_func, metric_name, beta, Ct, K):
     # Initialize model parameters (theta_i) for each client
 
     num_clients = len(client_train_datasets)
@@ -77,63 +77,49 @@ def run_sheaf_fmtl_subgraph(client_train_datasets, client_test_datasets, num_rou
     # Training loop
     for round in range(num_rounds):
 
-        if round % K == 0:
+        
 
-            L_gaps = []
-            
-            for sub_g in sub_graphs:
-                L_gap = 0
-                for node in range(num_clients):
-                    client_model = client_models[node]
-                    with torch.no_grad():
-                        theta_i = torch.cat([param.view(-1) for param in client_model.parameters()])
-                        for neighbor in sub_g.neighbors(node):
+        L_gaps = np.zeros((num_clients, num_clients))
+
+        
+        for sub_g in sub_graphs:
+            for node in range(num_clients):
+                client_model = client_models[node]
+                with torch.no_grad():
+                    theta_i = torch.cat([param.view(-1) for param in client_model.parameters()])
+                    for neighbor in range(num_clients):
+                        if adjacency_matrix[node, neighbor] == 1: 
                             P_ij = P[(node, neighbor)]
                             P_ji = P[(neighbor, node)]
                             theta_j = torch.cat([param.view(-1) for param in client_models[neighbor].parameters()])
-                            L_gap += 0.5 * np.linalg.norm(P_ij @ theta_i - P_ji @ theta_j)
-                L_gaps.append(L_gap)
+                            L_gaps[node, neighbor] = np.linalg.norm(P_ij @ theta_i - P_ji @ theta_j)
+            
+
+
+
+
+        adjacency_subgraph = np.zeros((num_clients, num_clients), dtype=int)
+
+        # Set entries of W according to the rules
+        for i in range(num_clients):
+            # Find the column index j that maximizes L[i, j], excluding the diagonal entry (i == j)
+            max_j = np.argmax(L_gaps[i] * (1 - np.eye(num_clients)[i]))  # Multiply by 0 on the diagonal
+            
+            # Set W[i, j] = 1 for the max entry
+            adjacency_subgraph[i, max_j] = 1
+
         
-            n = len(sub_graphs)
-            x = cp.Variable(n)
-            algebraic_connectivity = lambda_sum_smallest(sum(x[i] * laplacians[i] for i in range(n)), 2)
-            L_gap_distance = sum(x[i] * L_gaps[i] for i in range(n))
-
-
-            # Define objective
-            objective = cp.Maximize(algebraic_connectivity + beta * L_gap_distance)
-            # Define constraints
-            constraints = [
-            x >= 0,          # Elementwise inequality 0 <= x
-            cp.sum(x) <= Ct * n, # Elementwise inequality x <= 1
-            x <= 1
-            ]
-
-            # Formulate and solve the problem
-            problem = cp.Problem(objective, constraints)
-            problem.solve()
-            probabilities = np.clip(x.value, 0, 1, out=None)
-
-            # Original list of elements
-            elements = np.ones(len(probabilities), np.int32)
-
-
-        # Define the number of trials for each element (for example, 1 trial per element)
-        n_trials = 1
-
-        # Generate the new list with binomial sampling
-        sampled_elements = [np.random.binomial(n_trials, p) * element for element, p in zip(elements, probabilities)]
-
-        print(round)
-        G_merged = nx.Graph()
-        G_merged.add_nodes_from(range(num_clients))
-        for p, sub_g in zip(sampled_elements, sub_graphs):
-            if p:
-                G_merged = nx.compose(G_merged, sub_g)
+        #adjacency_subgraph = adjacency_subgraph.T
 
 
 
-        merged_adjacency_matrix = nx.adjacency_matrix(G_merged).toarray()
+        
+        G_merged = nx.DiGraph(adjacency_subgraph)
+        
+
+
+
+    
         max_neighbors = max(len(n) for n in neighbors)
 
         
@@ -160,7 +146,7 @@ def run_sheaf_fmtl_subgraph(client_train_datasets, client_test_datasets, num_rou
                 # Update theta_i based on P_ij and neighbors
                 sum_P_terms = torch.zeros_like(theta_i)
                 for j in range(num_clients):
-                    if merged_adjacency_matrix[i, j] == 1:
+                    if adjacency_subgraph[i, j] == 1:
                         P_ij = P[(i, j)]
                         P_ji = P[(j, i)]
                         theta_j = torch.cat([param.view(-1) for param in client_models[j].parameters()])
@@ -178,7 +164,7 @@ def run_sheaf_fmtl_subgraph(client_train_datasets, client_test_datasets, num_rou
 
                 # Update P_ij matrices
                 for j in range(num_clients):
-                    if merged_adjacency_matrix[i, j] == 1:
+                    if adjacency_subgraph[i, j] == 1:
                         P_ij = P[(i, j)]
                         P_ji = P[(j, i)]
                         theta_j = torch.cat([param.view(-1) for param in client_models[j].parameters()])
@@ -194,9 +180,9 @@ def run_sheaf_fmtl_subgraph(client_train_datasets, client_test_datasets, num_rou
 
         # Calculate communication cost
         num_params = count_model_parameters(client_models[0])
-        sampled_neighbors = [np.nonzero(merged_adjacency_matrix[i])[0].tolist() for i in range(num_clients)]
-        num_edges = 0.5 * sum(len(n) for n in sampled_neighbors)
-        cumulative_transmitted_bits += 2 * num_edges * 32 * int(factor*num_params)
+        sampled_neighbors = [np.nonzero(adjacency_subgraph[:, i])[0].tolist() for i in range(num_clients)]
+        num_edges = sum(len(n) for n in sampled_neighbors)
+        cumulative_transmitted_bits += num_edges * 32 * int(factor*num_params)
         transmitted_bits_per_iteration[round] = cumulative_transmitted_bits
         
     
