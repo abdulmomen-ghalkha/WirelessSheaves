@@ -117,7 +117,7 @@ def read_school_data(seed=None, bias=False, standardize=True):
         client_test_datasets.append(test_dataset)
 
     return client_train_datasets, client_test_datasets
-
+'''
 def read_vehicle_data(seed=None, bias=False, density=1.0, standardize=False, downsample_rate=0.2):
     """Read Vehicle dataset from .mat file.    """
     x_trains, y_trains, x_tests, y_tests = [], [], [], []
@@ -168,6 +168,88 @@ def read_vehicle_data(seed=None, bias=False, density=1.0, standardize=False, dow
         client_test_datasets.append(test_dataset)
 
     return client_train_datasets, client_test_datasets, input_size, num_classes 
+'''
+def read_vehicle_data(seed=None, bias=False, density=1.0, standardize=False, downsample_rate=0.2, feature_groups=4, features_to_drop=4):
+    """Read Vehicle dataset from .mat file with partial feature dropping for groups."""
+    import random
+    x_trains, y_trains, x_tests, y_tests = [], [], [], []
+    mat = scipy.io.loadmat('./Datasets/vehicle.mat')
+    raw_x, raw_y = mat['X'], mat['Y']  # y in {-1, 1}
+
+    # Additional code for downsampling
+    num_clients = len(raw_x)
+    downsample_clients = np.random.choice(num_clients, size=int(num_clients / 2), replace=False)
+
+    client_train_datasets = []
+    client_test_datasets = []
+
+    input_size = np.shape(raw_x[0][0])[1]
+    num_classes = len(np.unique(raw_y[0][0].flatten()))
+
+
+
+    # Divide clients into groups
+    clients_per_group = (int)(np.ceil(num_clients / feature_groups))
+    group_feature_indices = []
+
+    # Assign feature subsets to each group
+    total_features = np.arange(input_size)
+    for _ in range(feature_groups):
+        # Drop `features_to_drop` features from the total set
+        if features_to_drop > 0:
+            drop_features = np.random.choice(total_features, size=np.random.choice(features_to_drop), replace=False)
+            keep_features = np.setdiff1d(total_features, drop_features)
+        else:
+            keep_features = total_features
+
+        group_feature_indices.append(keep_features)
+    
+    modified_input_sizes = []
+
+    for i in range(num_clients):
+        features, label = raw_x[i][0], raw_y[i][0].flatten()
+        label[label == -1] = 0
+
+        features_tensor = torch.tensor(features, dtype=torch.float32)
+        label_tensor = torch.tensor(label, dtype=torch.long)
+
+        # Assign features based on client group
+        group_id = i // clients_per_group  # Determine the group for the client
+        selected_features = group_feature_indices[group_id]  # Get group's feature subset
+        modified_input_sizes.append(len(selected_features))
+        features_tensor = features_tensor[:, selected_features]
+
+        # Downsampling if the client is selected
+        if i in downsample_clients:
+            downsample_idx = np.random.choice(
+                len(features_tensor), size=int(len(features_tensor) * downsample_rate), replace=False
+            )
+            features_tensor = features_tensor[downsample_idx]
+            label_tensor = label_tensor[downsample_idx]
+
+        x_train, x_test, y_train, y_test = train_test_split(
+            features_tensor, label_tensor, test_size=0.25, random_state=seed
+        )
+
+        if standardize:
+            scaler = StandardScaler().fit(x_train)
+            x_train = scaler.transform(x_train)
+            x_test = scaler.transform(x_test)
+        if bias:
+            x_train = np.c_[x_train, np.ones(len(x_train))]
+            x_test = np.c_[x_test, np.ones(len(x_test))]
+
+        x_train = torch.tensor(x_train, dtype=torch.float32)
+        x_test = torch.tensor(x_test, dtype=torch.float32)
+
+        train_dataset = TensorDataset(x_train, y_train)
+        test_dataset = TensorDataset(x_test, y_test)
+        client_train_datasets.append(train_dataset)
+        client_test_datasets.append(test_dataset)
+
+    return client_train_datasets, client_test_datasets, modified_input_sizes, num_classes
+
+
 
 def read_har_data(downsample_rate=0.2, downsample_clients=None):
     client_train_datasets = []

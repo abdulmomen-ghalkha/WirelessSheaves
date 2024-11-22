@@ -5,19 +5,21 @@ import numpy as np
 from torch.utils.data import DataLoader
 from utils import generate_random_adjacency_matrix, count_model_parameters, evaluate_metric
 
-def run_sheaf_fmtl(client_train_datasets, client_test_datasets, num_rounds, alpha, eta, lambda_reg, factor, adjacency_matrix, model, loss_func, metric_func, metric_name):
+def run_sheaf_fmtl(client_train_datasets, client_test_datasets, num_rounds, alpha, eta, lambda_reg, factor, adjacency_matrix, models, loss_func, metric_func, metric_name):
     # Initialize model parameters (theta_i) for each client
     num_clients = len(client_train_datasets)
-    client_models = [copy.deepcopy(model) for _ in client_train_datasets]
+    client_models = [copy.deepcopy(models[i]) for i in range(len(client_train_datasets))]
     neighbors = [np.nonzero(adjacency_matrix[i])[0].tolist() for i in range(num_clients)]
     max_neighbors = max(len(n) for n in neighbors)
 
     # Initialize P_ij matrices
+        # Initialize P_ij matrices
     P = {}
     for i, j in zip(*adjacency_matrix.nonzero()):
-        num_params = sum(p.numel() for p in client_models[0].parameters())
-        P[(i, j)] = torch.randn(int(factor*num_params), num_params)
-        P[(j, i)] = torch.randn(int(factor*num_params), num_params)
+        num_params_i = sum(p.numel() for p in client_models[i].parameters())
+        num_params_j = sum(p.numel() for p in client_models[j].parameters())
+        P[(i, j)] = torch.randn(int(factor*(num_params_i + num_params_j) // 2), num_params_i)
+        P[(j, i)] = torch.randn(int(factor*(num_params_i + num_params_j) // 2), num_params_j)
 
     # Initialize accuracy storage
     average_test_metrics = []
@@ -79,7 +81,7 @@ def run_sheaf_fmtl(client_train_datasets, client_test_datasets, num_rounds, alph
         average_test_metrics.append(average_test_metric)
 
         # Calculate communication cost
-        num_params = count_model_parameters(client_models[0])
+        num_params = sum([count_model_parameters(client_models[i]) for i in range(num_clients)] ) // num_clients 
 
 
         #neighbors = [np.nonzero(adjacency_matrix[i])[0].tolist() for i in range(num_clients)]
