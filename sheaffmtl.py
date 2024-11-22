@@ -28,6 +28,24 @@ def run_sheaf_fmtl(client_train_datasets, client_test_datasets, num_rounds, alph
 
     # Training loop
     for round in range(num_rounds):
+
+        L_gaps_test = np.zeros((num_clients, num_clients))
+
+        
+        
+        for node in range(num_clients):
+            client_model = client_models[node]
+            with torch.no_grad():
+                theta_i = torch.cat([param.view(-1) for param in client_model.parameters()])
+                for neighbor in range(num_clients):
+                    if adjacency_matrix[node, neighbor] == 1: 
+                        P_ij = P[(node, neighbor)]
+                        P_ji = P[(neighbor, node)]
+                        theta_j = torch.cat([param.view(-1) for param in client_models[neighbor].parameters()])
+                        L_gaps_test[node, neighbor] = np.linalg.norm(P_ij @ theta_i - P_ji @ theta_j)
+
+
+
         for i in range(num_clients):
             client_model = client_models[i]
             optimizer = torch.optim.SGD(client_model.parameters(), lr=alpha)
@@ -90,6 +108,10 @@ def run_sheaf_fmtl(client_train_datasets, client_test_datasets, num_rounds, alph
         cumulative_transmitted_bits += 2 * num_edges * 32 * int(factor*num_params)  
         
         transmitted_bits_per_iteration[round] = cumulative_transmitted_bits
+
+        print(f"round: {round}, Bytes: {cumulative_transmitted_bits / 8 / 1024}KB, Average_metric: {average_test_metric}, L_gap: {np.linalg.norm(L_gaps_test)}")
+        
+    
         
         
 
